@@ -1,0 +1,261 @@
+import * as THREE from 'three';
+
+let playerHealth = 100;
+let enemyHealth = 100;
+let attackCooldown = 0;
+let enemyAttackCooldown = 0;
+
+const hud = document.createElement('div');
+hud.style.cssText = `
+  position:fixed;top:12px;left:12px;z-index:10;
+  color:white;font:bold 16px Arial;
+  background:#0009;padding:12px;border-radius:10px;
+`;
+document.body.appendChild(hud);
+
+function updateHUD() {
+  hud.innerHTML = `
+    ❤️ Player: ${Math.max(0, playerHealth)}%
+    <br><br>
+    👹 Enemy: ${Math.max(0, enemyHealth)}%
+    <br><br>
+    <span style="font-size:12px">Get close to fight!</span>
+  `;
+}
+updateHUD();
+
+function updateCombat(dt) {
+  attackCooldown = Math.max(0, attackCooldown - dt);
+  enemyAttackCooldown = Math.max(0, enemyAttackCooldown - dt);
+
+  const dx = player.position.x - enemy.position.x;
+  const dz = player.position.z - enemy.position.z;
+  const distance = Math.hypot(dx, dz);
+
+  // Enemy follows the player
+  if (distance > 1.4 && enemyHealth > 0 && playerHealth > 0) {
+    const speed = 1.8 * dt;
+    enemy.position.x += (dx / distance) * speed;
+    enemy.position.z += (dz / distance) * speed;
+  }
+
+  // Enemy faces the player
+  if (distance > 0.01) {
+    enemy.rotation.y = Math.atan2(dx, dz);
+  }
+
+  // Player attacks by moving close and tapping the attack button
+  if (
+    attackPressed &&
+    attackCooldown <= 0 &&
+    distance < 3 &&
+    enemyHealth > 0 &&
+    playerHealth > 0
+  ) {
+    enemyHealth = Math.max(0, enemyHealth - 20);
+    attackCooldown = 0.5;
+  }
+
+  // Enemy damages the player when close
+  if (
+    distance < 1.5 &&
+    enemyAttackCooldown <= 0 &&
+    enemyHealth > 0 &&
+    playerHealth > 0
+  ) {
+    playerHealth = Math.max(0, playerHealth - 10);
+    enemyAttackCooldown = 1;
+  }
+
+  if (enemyHealth <= 0) {
+    enemy.visible = false;
+    hud.innerHTML = '🏆 YOU WIN!';
+  } else if (playerHealth <= 0) {
+    hud.innerHTML = '💀 GAME OVER!';
+  } else {
+    updateHUD();
+  }
+}
+
+let attackPressed = false;
+
+const attackButton = document.createElement('button');
+attackButton.textContent = '⚔️ ATTACK';
+attackButton.style.cssText = `
+  position:fixed;right:20px;bottom:35px;z-index:20;
+  width:105px;height:65px;border-radius:16px;
+  background:#c62828;color:white;border:2px solid white;
+  font-weight:bold;font-size:15px;touch-action:manipulation;
+`;
+attackButton.onpointerdown = event => {
+  event.preventDefault();
+  attackPressed = true;
+};
+attackButton.onpointerup = () => attackPressed = false;
+attackButton.onpointercancel = () => attackPressed = false;
+document.body.appendChild(attackButton);
+
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+scene.fog = new THREE.Fog(0x87ceeb, 35, 85);
+
+const camera = new THREE.PerspectiveCamera(
+  65, innerWidth / innerHeight, 0.1, 120
+);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.25));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.domElement.style.cssText =
+  'position:fixed;inset:0;width:100%;height:100%;z-index:0;';
+document.body.style.margin = '0';
+document.body.style.overflow = 'hidden';
+document.body.appendChild(renderer.domElement);
+
+const skyLight = new THREE.HemisphereLight(0xdaf0ff, 0x46513a, 1.8);
+scene.add(skyLight);
+
+const sun = new THREE.DirectionalLight(0xfff0d0, 2.5);
+sun.position.set(-12, 20, 10);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.camera.left = -30;
+sun.shadow.camera.right = 30;
+sun.shadow.camera.top = 30;
+sun.shadow.camera.bottom = -30;
+scene.add(sun);
+
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(60, 60),
+  new THREE.MeshStandardMaterial({ color: 0x398044 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+function addTree(x, z) {
+  const trunk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.15, 0.22, 1.5, 6),
+    new THREE.MeshStandardMaterial({ color: 0x79502f })
+  );
+  trunk.position.set(x, 0.75, z);
+  trunk.castShadow = true;
+scene.add(trunk);
+
+  const leaves = new THREE.Mesh(
+    new THREE.ConeGeometry(1, 2.5, 7),
+    new THREE.MeshStandardMaterial({ color: 0x176b35 })
+  );
+  leaves.position.set(x, 2.5, z);
+  leaves.castShadow = true;
+scene.add(leaves);
+}
+
+function addRock(x, z, size) {
+  const rock = new THREE.Mesh(
+    new THREE.DodecahedronGeometry(size),
+    new THREE.MeshStandardMaterial({ color: 0x777777 })
+  );
+  rock.position.set(x, size * 0.6, z);
+  rock.castShadow = true;
+scene.add(rock);
+}
+
+for (let i = 0; i < 14; i++) {
+  const x = (Math.random() - 0.5) * 45;
+  const z = (Math.random() - 0.5) * 45;
+  if (Math.abs(x) < 5 && Math.abs(z) < 5) continue;
+  if (i % 2 === 0) addTree(x, z);
+  else addRock(x, z, 0.4 + Math.random() * 0.6);
+}
+
+const player = new THREE.Mesh(
+  new THREE.BoxGeometry(1, 1.8, 1),
+  new THREE.MeshStandardMaterial({ color: 0x1565ff })
+);
+player.position.y = 0.9;
+player.castShadow = true;
+scene.add(player);
+
+const enemy = new THREE.Mesh(
+  new THREE.BoxGeometry(1, 1.5, 1),
+  new THREE.MeshStandardMaterial({ color: 0xff2222 })
+);
+enemy.position.set(3, 0.75, -3);
+enemy.castShadow = true;
+scene.add(enemy);
+
+const held = new Set();
+const pad = document.createElement('div');
+pad.style.cssText =
+  'position:fixed;bottom:20px;left:15px;display:grid;' +
+  'grid-template-columns:repeat(3,52px);gap:5px;z-index:5;';
+document.body.appendChild(pad);
+
+function button(label, direction) {
+  const b = document.createElement('button');
+  b.textContent = label;
+  b.style.cssText =
+    'height:52px;width:52px;background:#243b55;color:white;' +
+    'border:1px solid white;border-radius:12px;font-size:22px;' +
+    'touch-action:none;';
+  b.onpointerdown = e => {
+    e.preventDefault();
+    held.add(direction);
+    b.setPointerCapture(e.pointerId);
+  };
+  const release = () => held.delete(direction);
+  b.onpointerup = release;
+  b.onpointercancel = release;
+  b.onlostpointercapture = release;
+  pad.appendChild(b);
+}
+
+function empty() {
+  const d = document.createElement('div');
+  pad.appendChild(d);
+}
+
+empty(); button('▲', 'up'); empty();
+button('◀', 'left'); button('▼', 'down');
+button('▶', 'right');
+
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const speed = 5 * dt;
+
+  if (held.has('up')) player.position.z -= speed;
+  if (held.has('down')) player.position.z += speed;
+  if (held.has('left')) player.position.x -= speed;
+  if (held.has('right')) player.position.x += speed;
+
+  player.position.x = THREE.MathUtils.clamp(player.position.x, -28, 28);
+  player.position.z = THREE.MathUtils.clamp(player.position.z, -28, 28);
+
+  enemy.rotation.y += dt;
+  camera.position.set(
+    player.position.x,
+    player.position.y + 5,
+    player.position.z + 8
+  );
+  camera.lookAt(player.position);
+  renderer.render(scene, camera);
+}
+
+camera.position.set(0, 6, 8);
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+animate();
